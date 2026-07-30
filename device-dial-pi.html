@@ -1,0 +1,81 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    :root { color-scheme: dark; font-family: system-ui, sans-serif; color: #eee; background: #252525; }
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 14px; }
+    label { display: block; margin: 8px 0; font-size: 12px; font-weight: 650; }
+    select, select option, input, button { color: #eee; background: #1f1f1f; }
+    select, input, button { width: 100%; min-height: 32px; margin-top: 6px; border: 1px solid #5c5c5c; border-radius: 5px; padding: 6px 8px; }
+    select:focus, input:focus, button:focus { outline: 2px solid #8ab4f8; outline-offset: 1px; }
+    #status { color: #c6c6c6; font-size: 11px; margin: 8px 0; }
+  </style>
+  <script>
+    window.connectElgatoStreamDeckSocket = function(port, uuid, registerEvent, info, actionInfo) {
+      const parsed = typeof actionInfo === "string" ? JSON.parse(actionInfo) : actionInfo;
+      const context = parsed.context;
+      const action = parsed.action;
+      let settings = parsed.payload?.settings ?? {};
+      const kind = document.getElementById("kind");
+      const device = document.getElementById("device");
+      const title = document.getElementById("title");
+      const step = document.getElementById("step");
+      const maximum = document.getElementById("maximum");
+      const status = document.getElementById("status");
+      kind.value = settings.device_kind || "output";
+      title.value = settings.custom_title || "";
+      step.value = settings.volume_step || 2;
+      maximum.value = Number(settings.maximum_volume) === 150 ? "150" : "100";
+      const socket = new WebSocket(`ws://127.0.0.1:${port}`);
+      const request = () => {
+        status.textContent = "Loading devices…";
+        socket.send(JSON.stringify({ event: "sendToPlugin", action, context, payload: { event: "requestAudioDevices" } }));
+      };
+      const save = () => {
+        settings = { ...settings, device_kind: kind.value, target_id: device.value,
+          custom_title: title.value, volume_step: Number(step.value),
+          maximum_volume: Number(maximum.value) };
+        socket.send(JSON.stringify({ event: "setSettings", context, payload: settings }));
+      };
+      socket.onmessage = event => {
+        const message = JSON.parse(event.data);
+        if (message.event !== "sendToPropertyInspector" || message.payload?.event !== "audioDeviceList") return;
+        const devices = message.payload.devices || [];
+        device.innerHTML = '<option value="">Select a device</option>';
+        for (const item of devices) {
+          const option = document.createElement("option");
+          option.value = item.id;
+          option.textContent = item.name;
+          device.appendChild(option);
+        }
+        device.value = settings.target_id || "";
+        status.textContent = message.payload.error
+          ? `Device enumeration failed: ${message.payload.error}`
+          : (devices.length ? `Found ${devices.length} devices` : "No available devices");
+      };
+      socket.onerror = () => status.textContent = "WebSocket connection failed";
+      socket.onopen = () => {
+        socket.send(JSON.stringify({ event: registerEvent, uuid }));
+        window.setTimeout(request, 150);
+      };
+      kind.onchange = () => { device.value = ""; save(); window.setTimeout(request, 100); };
+      device.onchange = save;
+      title.onchange = save;
+      step.onchange = save;
+      maximum.onchange = save;
+      document.getElementById("refresh").onclick = request;
+    };
+  </script>
+</head>
+<body>
+  <label>Device type<select id="kind"><option value="output">Output device</option><option value="input">Input device</option></select></label>
+  <label>Device<select id="device"><option>Connecting…</option></select></label>
+  <div id="status">Connecting…</div>
+  <button id="refresh" type="button">Refresh devices</button>
+  <label>Custom title<input id="title" type="text" placeholder="Use device name"></label>
+  <label>Volume step<input id="step" type="number" min="1" max="10" value="2"></label>
+  <label>Maximum volume<select id="maximum"><option value="100">100%</option><option value="150">150%</option></select></label>
+</body>
+</html>

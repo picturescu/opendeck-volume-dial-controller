@@ -1,4 +1,13 @@
 /target
+/dist
+*.zip
+*.zip.sha256
+*.log
+*.tmp
+*~
+*.swp
+*.swo
+.DS_Store
 oa-volume-controller-x86_64-unknown-linux-gnu
 oa-volume-controller-aarch64-unknown-linux-gnu
 ignored_apps.json

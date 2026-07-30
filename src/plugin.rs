@@ -1,10 +1,16 @@
+use openaction::global_events::{
+    DidReceiveGlobalSettingsEvent, GlobalEventHandler, set_global_event_handler,
+};
 use openaction::*;
-use openaction::global_events::{GlobalEventHandler, DidReceiveGlobalSettingsEvent, set_global_event_handler};
 
 use serde::{Deserialize, Serialize};
 
 use crate::{
+    app_column::ApplicationVolumeColumnAction,
     audio::{self, pulse::pulse_monitor::refresh_audio_applications, *},
+    device_dial::AudioDeviceVolumeDialAction,
+    dial::ApplicationVolumeDialAction,
+    dynamic::{ApplicationSelectorButtonAction, DynamicApplicationVolumeDialAction},
     gfx::{self},
     mixer,
     utils::{self, ButtonPressControl},
@@ -34,6 +40,8 @@ pub struct VolumeControllerSettings {
 #[serde(default)]
 pub struct GlobalPluginSettings {
     pub ignored_apps_list: Vec<String>,
+    pub application_columns: Vec<crate::app_column::PersistedColumn>,
+    pub dynamic_focus: Vec<crate::dynamic::PersistedFocus>,
 }
 
 pub struct GlobalHandler;
@@ -46,11 +54,19 @@ impl GlobalEventHandler for GlobalHandler {
         Ok(())
     }
 
-    async fn did_receive_global_settings(&self, event: DidReceiveGlobalSettingsEvent) -> OpenActionResult<()> {
-        let global: GlobalPluginSettings = serde_json::from_value(event.payload.settings)
-            .unwrap_or_default();
+    async fn did_receive_global_settings(
+        &self,
+        event: DidReceiveGlobalSettingsEvent,
+    ) -> OpenActionResult<()> {
+        let global: GlobalPluginSettings =
+            serde_json::from_value(event.payload.settings).unwrap_or_default();
+        crate::app_column::load_persisted_columns(global.application_columns.clone()).await;
+        crate::dynamic::load_persisted_focus(global.dynamic_focus.clone()).await;
 
-        println!("did_receive_global_settings: {} ignored apps", global.ignored_apps_list.len());
+        println!(
+            "did_receive_global_settings: {} ignored apps",
+            global.ignored_apps_list.len()
+        );
 
         let mut shared = SHARED_SETTINGS.lock().await;
         if shared.ignored_apps_list != global.ignored_apps_list {
@@ -85,7 +101,10 @@ impl Action for VolumeControllerAction {
         utils::cleanup_sd_column(instance).await;
 
         let Some(coords) = instance.coordinates else {
-            println!("Warning: Instance {} has no coordinates", instance.instance_id);
+            println!(
+                "Warning: Instance {} has no coordinates",
+                instance.instance_id
+            );
             return Ok(());
         };
 
@@ -100,8 +119,10 @@ impl Action for VolumeControllerAction {
         instance: &Instance,
         settings: &Self::Settings,
     ) -> OpenActionResult<()> {
-        println!("did_receive_settings for instance {}: show_sys_mixer={}",
-            instance.instance_id, settings.show_sys_mixer);
+        println!(
+            "did_receive_settings for instance {}: show_sys_mixer={}",
+            instance.instance_id, settings.show_sys_mixer
+        );
 
         // Check if show_sys_mixer changed to avoid infinite loops
         let mut cached = SHARED_SETTINGS.lock().await;
@@ -133,26 +154,30 @@ impl Action for VolumeControllerAction {
 
     async fn will_appear(&self, instance: &Instance, _: &Self::Settings) -> OpenActionResult<()> {
         // Sync with shared settings when appearing
-        let shared = SHARED_SETTINGS.lock().await;
-        let _ = instance.set_settings(&*shared).await;
-        drop(shared);
+        let shared = SHARED_SETTINGS.lock().await.clone();
+        let _ = instance.set_settings(&shared).await;
 
         let Some(coords) = instance.coordinates else {
-            println!("Warning: Instance {} has no coordinates", instance.instance_id);
+            println!(
+                "Warning: Instance {} has no coordinates",
+                instance.instance_id
+            );
             return Ok(());
         };
 
-        let mut column_map = COLUMN_TO_CHANNEL_MAP.lock().await;
-        let mut channels = mixer::MIXER_CHANNELS.lock().await;
-
         let sd_column = coords.column;
-
-        // Calculate next index before entry() call to avoid borrow checker issue
-        let next_index = column_map.len() as u8;
-        let channel_index = *column_map.entry(sd_column).or_insert(next_index);
-
-        let channel = match channels.get_mut(&channel_index) {
-            Some(ch) => ch,
+        let channel_index = {
+            let mut column_map = COLUMN_TO_CHANNEL_MAP.lock().await;
+            let next_index = column_map.len() as u8;
+            *column_map.entry(sd_column).or_insert(next_index)
+        };
+        let channel = match mixer::MIXER_CHANNELS
+            .lock()
+            .await
+            .get(&channel_index)
+            .cloned()
+        {
+            Some(channel) => channel,
             None => {
                 utils::cleanup_sd_column(instance).await;
                 return Ok(());
@@ -161,20 +186,16 @@ impl Action for VolumeControllerAction {
 
         match coords.row {
             0 => {
-                utils::update_header(instance, channel).await;
-                channel.header_id = Some(instance.instance_id.clone());
+                utils::update_header(instance, &channel).await;
             }
             1 | 2 => {
                 if let Ok((upper_img, lower_img)) =
                     gfx::get_volume_bar_data_uri_split(channel.vol_percent)
                 {
-                    let img;
-                    if coords.row == 1 {
-                        channel.upper_vol_btn_id = Some(instance.instance_id.clone());
-                        img = upper_img;
+                    let img = if coords.row == 1 {
+                        upper_img
                     } else {
-                        channel.lower_vol_btn_id = Some(instance.instance_id.clone());
-                        img = lower_img;
+                        lower_img
                     };
                     instance.set_image(Some(img), None).await?;
                 }
@@ -193,11 +214,11 @@ impl Action for VolumeControllerAction {
         let mut press_control = BUTTON_PRESS_CONTROL.lock().await;
 
         // Validate this is the correct button press
-        if let Some(action_id) = press_control.action_id.as_ref() {
-            if action_id != &instance.instance_id {
-                drop(press_control);
-                return Ok(());
-            }
+        if let Some(action_id) = press_control.action_id.as_ref()
+            && action_id != &instance.instance_id
+        {
+            drop(press_control);
+            return Ok(());
         }
 
         if let Some(duration_ms) = press_control.get_release_time() {
@@ -208,7 +229,10 @@ impl Action for VolumeControllerAction {
             drop(press_control);
 
             let Some(coords) = instance.coordinates else {
-                println!("Warning: Instance {} has no coordinates", instance.instance_id);
+                println!(
+                    "Warning: Instance {} has no coordinates",
+                    instance.instance_id
+                );
                 return Ok(());
             };
             let sd_column = coords.column;
@@ -233,12 +257,7 @@ impl Action for VolumeControllerAction {
                     drop(channels);
                     drop(column_map);
 
-                    {
-                        let mut audio_system = audio::create();
-                        if let Err(e) = audio_system.mute_volume(uid, false, is_device) {
-                            println!("Warning: Failed to unmute audio: {}", e);
-                        }
-                    } // audio_system is dropped here
+                    audio::set_application_group_mute(vec![(uid, is_device)], false);
 
                     // Read cached shared settings, append app, and save back
                     let updated_settings = {
@@ -252,6 +271,8 @@ impl Action for VolumeControllerAction {
                     // Save ignored apps to global settings
                     let global = GlobalPluginSettings {
                         ignored_apps_list: updated_settings.ignored_apps_list.clone(),
+                        application_columns: crate::app_column::persisted_columns().await,
+                        dynamic_focus: crate::dynamic::persisted_focus().await,
                     };
                     let _ = set_global_settings(global).await;
 
@@ -260,7 +281,10 @@ impl Action for VolumeControllerAction {
                         let _ = inst.set_settings(&updated_settings).await;
                     }
 
-                    println!("Added {} to ignored apps list and broadcast to all instances", app_name);
+                    println!(
+                        "Added {} to ignored apps list and broadcast to all instances",
+                        app_name
+                    );
                 }
             }
         }
@@ -274,61 +298,49 @@ impl Action for VolumeControllerAction {
         drop(press_control); // Release lock early
 
         let Some(coords) = instance.coordinates else {
-            println!("Warning: Instance {} has no coordinates", instance.instance_id);
+            println!(
+                "Warning: Instance {} has no coordinates",
+                instance.instance_id
+            );
             return Ok(());
         };
-
-        let column_map = COLUMN_TO_CHANNEL_MAP.lock().await;
-        let mut channels = mixer::MIXER_CHANNELS.lock().await;
 
         let sd_column = coords.column;
-
-        // Look up the channel index for this SD column
-        let Some(&channel_index) = column_map.get(&sd_column) else {
+        let Some(channel_index) = COLUMN_TO_CHANNEL_MAP.lock().await.get(&sd_column).copied()
+        else {
             return Ok(());
         };
-
-        if let Some(channel) = channels.get_mut(&channel_index) {
+        let command = {
+            let mut channels = mixer::MIXER_CHANNELS.lock().await;
+            let Some(channel) = channels.get_mut(&channel_index) else {
+                return Ok(());
+            };
             match coords.row {
                 0 => {
                     channel.mute = !channel.mute;
-                    let mut audio_system = audio::create();
-                    if let Err(e) = audio_system.mute_volume(channel.uid, channel.mute, channel.is_device) {
-                        println!("Warning: Failed to toggle mute for {}: {}", channel.app_name, e);
-                    } else {
-                        println!("Muting app {}", channel.app_name);
-                    }
+                    Some((channel.uid, channel.is_device, None, Some(channel.mute)))
                 }
                 1 => {
-                    let app_uid = channel.uid;
-
-                    if channel.vol_percent >= 100.0 {
-                        return Ok(());
-                    }
-
-                    let mut audio_system = audio::create();
-                    if let Err(e) = audio_system.increase_volume(app_uid, VOLUME_INCREMENT, channel.is_device) {
-                        println!("Warning: Failed to increase volume for {}: {}", channel.app_name, e);
-                    } else {
-                        println!(
-                            "Volume up in app {} {}",
-                            channel.app_name, channel.vol_percent
-                        );
-                    }
+                    let target =
+                        (f64::from(channel.vol_percent) + VOLUME_INCREMENT).clamp(0.0, 100.0);
+                    channel.vol_percent = target as f32;
+                    Some((channel.uid, channel.is_device, Some(target), None))
                 }
                 2 => {
-                    let app_uid = channel.uid;
-                    let mut audio_system = audio::create();
-                    if let Err(e) = audio_system.decrease_volume(app_uid, VOLUME_INCREMENT, channel.is_device) {
-                        println!("Warning: Failed to decrease volume for {}: {}", channel.app_name, e);
-                    } else {
-                        println!(
-                            "Volume down in app {} {}",
-                            channel.app_name, channel.vol_percent
-                        );
-                    }
+                    let target =
+                        (f64::from(channel.vol_percent) - VOLUME_INCREMENT).clamp(0.0, 100.0);
+                    channel.vol_percent = target as f32;
+                    Some((channel.uid, channel.is_device, Some(target), None))
                 }
-                _ => {}
+                _ => None,
+            }
+        };
+        if let Some((uid, is_device, volume, mute)) = command {
+            if let Some(volume) = volume {
+                audio::set_application_group_volume(vec![(uid, is_device)], volume);
+            }
+            if let Some(mute) = mute {
+                audio::set_application_group_mute(vec![(uid, is_device)], mute);
             }
         }
 
@@ -343,12 +355,20 @@ pub async fn init() -> OpenActionResult<()> {
     audio::pulse::start_pulse_monitoring();
 
     // create initial map (ignored apps will be loaded via did_receive_global_settings)
-    let applications = {
+    let (applications, outputs, inputs) = {
         let mut audio_system = create();
-        audio_system
+        let applications = audio_system
             .list_applications()
-            .expect("Error fetching applications from SinkController")
+            .expect("Error fetching applications from SinkController");
+        let outputs = audio_system
+            .list_devices(crate::audio::DeviceKind::Output)
+            .unwrap_or_default();
+        let inputs = audio_system
+            .list_devices(crate::audio::DeviceKind::Input)
+            .unwrap_or_default();
+        (applications, outputs, inputs)
     };
+    audio::update_registry(applications.clone(), outputs, inputs);
 
     let ignored_apps = SHARED_SETTINGS.lock().await.ignored_apps_list.clone();
     mixer::create_mixer_channels(applications, &ignored_apps).await;
@@ -356,6 +376,11 @@ pub async fn init() -> OpenActionResult<()> {
     // Register global event handler and action
     set_global_event_handler(&GlobalHandler);
     register_action(VolumeControllerAction).await;
+    register_action(ApplicationVolumeColumnAction).await;
+    register_action(ApplicationVolumeDialAction).await;
+    register_action(AudioDeviceVolumeDialAction).await;
+    register_action(DynamicApplicationVolumeDialAction).await;
+    register_action(ApplicationSelectorButtonAction).await;
 
     run(std::env::args().collect()).await
 }

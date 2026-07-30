@@ -1,7 +1,7 @@
 {
-  "Name": "Volume Controller",
-  "Author": "Victor Marin",
-  "Version": "1.1.0",
+  "Name": "OpenDeck Volume Dial Controller",
+  "Author": "Liviu-Gabriel Simihăleanu; based on work by Victor Marin",
+  "Version": "1.2.0",
   "CodePaths": {
     "x86_64-unknown-linux-gnu": "oa-volume-controller-x86_64-unknown-linux-gnu",
     "aarch64-unknown-linux-gnu": "oa-volume-controller-aarch64-unknown-linux-gnu"
@@ -13,7 +13,7 @@
     }
   ],
   "Category": "Volume Controller",
-  "Description": "Take full control of your sound experience with fine-tuned per-app volume management!",
+  "Description": "Control application groups and Linux audio devices from OpenDeck keypad and encoder actions.",
   "Icon": "img/icon",
   "PropertyInspectorPath": "pi.html",
   "Actions": [
@@ -25,6 +25,114 @@
       "States": [
         {}
       ]
+    },
+    {
+      "Icon": "img/grid-slider",
+      "Name": "Application Volume Column",
+      "UUID": "com.victormarin.volume-controller.appcolumn",
+      "Tooltip": "Manually assign an application group to one three-key column",
+      "States": [
+        {
+          "Image": "img/wave-sound"
+        }
+      ],
+      "Controllers": [
+        "Keypad"
+      ],
+      "SupportedInMultiActions": false,
+      "PropertyInspectorPath": "app-column-pi.html"
+    },
+    {
+      "Icon": "img/grid-slider",
+      "Name": "Application Volume Dial",
+      "UUID": "com.victormarin.volume-controller.appdial",
+      "Tooltip": "Control an application with a Stream Deck+ dial",
+      "States": [
+        {
+          "Image": "img/wave-sound",
+          "Title": "Volume"
+        }
+      ],
+      "Encoder": {
+        "TriggerDescription": {
+          "Rotate": "Adjust volume",
+          "Push": "Toggle mute",
+          "Touch": "Toggle mute"
+        },
+        "layout": "$B1"
+      },
+      "Controllers": [
+        "Encoder"
+      ],
+      "SupportedInMultiActions": false,
+      "PropertyInspectorPath": "dial-pi.html"
+    },
+    {
+      "Icon": "img/grid-slider",
+      "Name": "Audio Device Volume Dial",
+      "UUID": "com.victormarin.volume-controller.devicedial",
+      "Tooltip": "Control an output or input audio device",
+      "States": [
+        {
+          "Image": "img/wave-sound",
+          "Title": "Volume"
+        }
+      ],
+      "Encoder": {
+        "TriggerDescription": {
+          "Rotate": "Adjust volume",
+          "Push": "Toggle mute",
+          "Touch": "Toggle mute"
+        },
+        "layout": "$B1"
+      },
+      "Controllers": [
+        "Encoder"
+      ],
+      "SupportedInMultiActions": false,
+      "PropertyInspectorPath": "device-dial-pi.html"
+    },
+    {
+      "Icon": "img/grid-slider",
+      "Name": "Dynamic Application Volume Dial",
+      "UUID": "com.victormarin.volume-controller.dynamicappdial",
+      "Tooltip": "Control the application group selected by a selector button",
+      "States": [
+        {
+          "Image": "img/wave-sound",
+          "Title": "Select app"
+        }
+      ],
+      "Encoder": {
+        "TriggerDescription": {
+          "Rotate": "Adjust focused application volume",
+          "Push": "Toggle mute",
+          "Touch": "Toggle mute"
+        },
+        "layout": "$B1"
+      },
+      "Controllers": [
+        "Encoder"
+      ],
+      "SupportedInMultiActions": false,
+      "PropertyInspectorPath": "dynamic-dial-pi.html"
+    },
+    {
+      "Icon": "img/grid-slider",
+      "Name": "Application Selector Button",
+      "UUID": "com.victormarin.volume-controller.appselector",
+      "Tooltip": "Focus an ordered application group on a dynamic dial",
+      "States": [
+        {
+          "Image": "img/wave-sound",
+          "Title": "Select apps"
+        }
+      ],
+      "Controllers": [
+        "Keypad"
+      ],
+      "SupportedInMultiActions": false,
+      "PropertyInspectorPath": "app-selector-pi.html"
     }
   ]
 }

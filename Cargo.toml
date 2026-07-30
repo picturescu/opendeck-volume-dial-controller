@@ -1,11 +1,16 @@
 [package]
 name = "oa-volume-controller"
-version = "1.1.0"
+version = "1.2.0"
 edition = "2024"
+description = "OpenDeck plugin for per-application, dynamic-group, and audio-device volume control on Linux"
+repository = "https://github.com/picturescu/opendeck-volume-dial-controller"
+homepage = "https://github.com/picturescu/opendeck-volume-dial-controller"
+license = "MIT"
+keywords = ["opendeck", "stream-deck", "pulseaudio", "pipewire", "audio"]
+categories = ["multimedia::audio"]
 
 [dependencies]
-pulsectl-rs = "0.3"
-openaction = "2.5.0"
+openaction = "2.7"
 tokio = { version = "1.45", features = ["full"] }
 log = "0.4"
 simplelog = "0.12"
@@ -18,3 +23,7 @@ anyhow = "1.0"
 image = "0.24"
 base64 = "0.22"
 tux-icons = "0.4.4"
+resvg = { version = "0.45", default-features = false }
+
+[dev-dependencies]
+tempfile = "3.20"

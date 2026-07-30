@@ -1,0 +1,128 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    :root { color-scheme: dark; font-family: system-ui, sans-serif; color: #eee; background: #252525; }
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 14px; color: #eee; background: #252525; }
+    label { display: block; margin: 8px 0; font-size: 12px; font-weight: 650; }
+    input, button { color: #eee; background: #1f1f1f; border: 1px solid #5c5c5c; border-radius: 5px; }
+    input, button { width: 100%; min-height: 32px; margin-top: 6px; padding: 6px 8px; }
+    input:focus, button:focus { border-color: #777; outline: 2px solid #8ab4f8; outline-offset: 1px; }
+    button { cursor: pointer; }
+    small, #status, #column-status { display: block; margin: 0 0 8px; color: #c6c6c6; font-size: 11px; line-height: 1.35; }
+    .picker { max-height: 180px; overflow-y: auto; border: 1px solid #5c5c5c; border-radius: 5px; background: #1f1f1f; }
+    .pick-row, .priority-row { display: flex; gap: 7px; align-items: center; padding: 7px; border-bottom: 1px solid #383838; font-size: 12px; }
+    .pick-row input { width: auto; min-height: auto; margin: 0; }
+    .priority-row span { flex: 1; }
+    .priority-row button { width: auto; min-height: 26px; margin: 0; padding: 3px 7px; }
+    .active { color: #8ab4f8; }
+  </style>
+  <script>
+    window.connectElgatoStreamDeckSocket = function(port, uuid, registerEvent, info, actionInfo) {
+      const parsed = typeof actionInfo === "string" ? JSON.parse(actionInfo) : actionInfo;
+      const action = parsed.action;
+      const context = parsed.context;
+      let settings = parsed.payload?.settings ?? {};
+      let targets = [];
+      let selectedIds = Array.isArray(settings.target_ids)
+        ? [...settings.target_ids]
+        : (settings.target_id ? [settings.target_id] : []);
+      let activeTargetId = null;
+      const search = document.getElementById("search");
+      const applications = document.getElementById("applications");
+      const priority = document.getElementById("priority");
+      const status = document.getElementById("status");
+      const columnStatus = document.getElementById("column-status");
+      const socket = new WebSocket(`ws://127.0.0.1:${port}`);
+
+      const save = () => {
+        settings = { ...settings, target_ids: selectedIds, target_id: "", target_name: "" };
+        socket.send(JSON.stringify({ event: "setSettings", context, payload: settings }));
+      };
+      const requestTargets = () => {
+        if (socket.readyState !== WebSocket.OPEN) return;
+        status.textContent = "Loading applications…";
+        socket.send(JSON.stringify({
+          event: "sendToPlugin", action, context,
+          payload: { event: "requestAudioTargets" }
+        }));
+      };
+      const nameFor = id => targets.find(item => item.id === id)?.name ||
+        id.split("\u001f").pop() || id;
+      const render = () => {
+        const filter = search.value.trim().toLowerCase();
+        applications.innerHTML = "";
+        for (const item of targets.filter(item =>
+          `${item.name} ${item.detail}`.toLowerCase().includes(filter))) {
+          const row = document.createElement("label");
+          row.className = "pick-row";
+          const box = document.createElement("input");
+          box.type = "checkbox";
+          box.checked = selectedIds.includes(item.id);
+          box.onchange = () => {
+            if (box.checked && !selectedIds.includes(item.id)) selectedIds.push(item.id);
+            if (!box.checked) selectedIds = selectedIds.filter(id => id !== item.id);
+            render(); save();
+          };
+          const text = document.createElement("span");
+          text.textContent = item.detail ? `${item.name} — ${item.detail}` : item.name;
+          row.append(box, text);
+          applications.appendChild(row);
+        }
+        priority.innerHTML = "";
+        selectedIds.forEach((id, index) => {
+          const row = document.createElement("div");
+          row.className = `priority-row${id === activeTargetId ? " active" : ""}`;
+          const text = document.createElement("span");
+          text.textContent = `${index + 1}. ${nameFor(id)}${id === activeTargetId ? " (Active)" : ""}`;
+          const button = (label, action) => {
+            const element = document.createElement("button");
+            element.type = "button"; element.textContent = label; element.onclick = action;
+            return element;
+          };
+          row.append(
+            text,
+            button("↑", () => { if (index) [selectedIds[index - 1], selectedIds[index]] = [id, selectedIds[index - 1]]; render(); save(); }),
+            button("↓", () => { if (index + 1 < selectedIds.length) [selectedIds[index], selectedIds[index + 1]] = [selectedIds[index + 1], id]; render(); save(); }),
+            button("Remove", () => { selectedIds = selectedIds.filter(value => value !== id); render(); save(); })
+          );
+          priority.appendChild(row);
+        });
+      };
+      socket.onmessage = event => {
+        const message = JSON.parse(event.data);
+        if (message.event !== "sendToPropertyInspector" ||
+            message.payload?.event !== "audioTargetList") return;
+        targets = Array.isArray(message.payload.targets) ? message.payload.targets : [];
+        activeTargetId = message.payload.activeTargetId || null;
+        const rows = Array.isArray(message.payload.presentRows) ? message.payload.presentRows : [];
+        columnStatus.textContent = `Column ${Number(message.payload.column) + 1}: rows ${rows.length ? rows.join(", ") : "none"} — ${message.payload.complete ? "Ready" : "Add all 3 keys"}`;
+        status.textContent = message.payload.error
+          ? `Audio enumeration failed: ${message.payload.error}`
+          : (targets.length ? `Found ${targets.length} applications` : "No active audio applications");
+        render();
+      };
+      socket.onerror = () => { status.textContent = "WebSocket connection failed"; };
+      socket.onclose = () => { status.textContent = "WebSocket connection failed"; };
+      socket.onopen = () => {
+        socket.send(JSON.stringify({ event: registerEvent, uuid }));
+        window.setTimeout(requestTargets, 150);
+      };
+      search.oninput = render;
+      document.getElementById("refresh").onclick = requestTargets;
+    };
+  </script>
+</head>
+<body>
+  <small>Place this action on all three keys of one vertical column.</small>
+  <div id="column-status">Checking column…</div>
+  <label>Applications<input id="search" type="search" placeholder="Search applications…"></label>
+  <div id="applications" class="picker"></div>
+  <div id="status">Connecting…</div>
+  <button id="refresh" type="button">Refresh applications</button>
+  <label>Selected priority</label>
+  <div id="priority" class="picker"></div>
+</body>
+</html>

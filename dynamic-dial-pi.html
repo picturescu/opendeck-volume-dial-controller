@@ -1,0 +1,23 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><style>
+:root{color-scheme:dark;font-family:system-ui,sans-serif;color:#eee;background:#252525}*{box-sizing:border-box}body{margin:0;padding:14px;background:#252525}label{display:block;margin:9px 0;font-size:12px;font-weight:650}input,select,option{width:100%;min-height:32px;margin-top:6px;padding:7px 8px;color:#eee;background:#1f1f1f;border:1px solid #5c5c5c;border-radius:5px}small,#status{display:block;color:#c6c6c6;font-size:11px;line-height:1.35}details{margin-top:12px}
+</style><script>
+window.connectElgatoStreamDeckSocket=function(port,uuid,registerEvent,info,actionInfo){
+ const parsed=typeof actionInfo==="string"?JSON.parse(actionInfo):actionInfo;
+ const context=parsed.context,action=parsed.action;let settings=parsed.payload?.settings??{};
+ const socket=new WebSocket(`ws://127.0.0.1:${port}`);
+ const title=document.getElementById("title"),step=document.getElementById("step"),maximum=document.getElementById("maximum"),group=document.getElementById("group"),status=document.getElementById("status");
+ title.value=settings.custom_title||"";step.value=settings.volume_step||2;maximum.value=Number(settings.maximum_volume)===150?"150":"100";group.value=settings.focus_group||"main";
+ const save=()=>{settings={...settings,custom_title:title.value,volume_step:Number(step.value),maximum_volume:Number(maximum.value),focus_group:group.value.trim()||"main"};socket.send(JSON.stringify({event:"setSettings",context,payload:settings}));};
+ [title,step,maximum,group].forEach(field=>field.onchange=save);
+ socket.onmessage=event=>{const message=JSON.parse(event.data);if(message.event==="sendToPropertyInspector"&&message.payload?.event==="dynamicDialStatus"){status.textContent=message.payload.selectorId?(message.payload.available?`Active target: ${message.payload.activeTargetId||"available"}`:"Focused group unavailable"):"No selector button selected";}};
+ socket.onerror=()=>status.textContent="WebSocket connection failed";
+ socket.onopen=()=>socket.send(JSON.stringify({event:registerEvent,uuid}));
+};
+</script></head><body>
+<div id="status">Connecting…</div>
+<label>Custom title<input id="title" type="text" placeholder="Use selector or application title"></label>
+<label>Volume step<input id="step" type="number" min="1" max="10" value="2"></label>
+<label>Maximum volume<select id="maximum"><option value="100">100%</option><option value="150">150%</option></select></label>
+<details><summary>Advanced</summary><label>Focus group<input id="group" value="main"></label><small>Must match the selector buttons. Most setups should keep “main”.</small></details>
+</body></html>

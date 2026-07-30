@@ -1,7 +1,13 @@
 use openaction::OpenActionResult;
 
+mod app_column;
+mod application_targets;
 mod audio;
+mod device_dial;
+mod dial;
+mod dynamic;
 mod gfx;
+mod icons;
 mod mixer;
 mod plugin;
 mod utils;

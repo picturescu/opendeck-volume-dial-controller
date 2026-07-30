@@ -1,0 +1,18 @@
+<!doctype html>
+<html data-selector-mode="button">
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="pi/common.css">
+  <script src="pi/application-selector.js"></script>
+</head>
+<body>
+  <label>Applications<input id="search" type="search" placeholder="Search applications…"></label>
+  <div id="applications" class="picker"></div>
+  <div id="status">Connecting…</div>
+  <button id="refresh" type="button">Refresh applications</button>
+  <label>Selected priority</label>
+  <div id="priority" class="picker"></div>
+  <label>Custom title<input id="custom-title" type="text" placeholder="Use active application name"></label>
+  <details><summary>Advanced</summary><label>Focus group<input id="focus-group" value="main"></label><small>Must match the dynamic dial.</small></details>
+</body>
+</html>
