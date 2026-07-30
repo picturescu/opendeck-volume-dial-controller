@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Install system and packaging dependencies
+        run: sudo apt-get update && sudo apt-get install -y libpulse-dev nodejs python3 zip unzip
+      - name: Rust formatting
+        run: cargo fmt --check
+      - name: Clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
+      - name: Tests
+        run: cargo test --all-features
+      - name: Release build
+        run: cargo build --release
+      - name: Manifest and whitespace validation
+        run: |
+          python3 -m json.tool manifest.json >/dev/null
+          git diff --check
+      - name: Property inspector JavaScript
+        shell: bash
+        run: |
+          set -euo pipefail
+          for file in *.html; do
+            if grep -q '<script' "$file"; then
+              sed -n '/<script>/,/<\/script>/p' "$file" | sed '1d;$d' | node --check
+            fi
+          done
+          if test -d pi; then
+            find pi -type f -name '*.js' -print0 |
+              while IFS= read -r -d '' file; do node --check "$file"; done
+          fi
+      - name: Package
+        run: ./scripts/package-release.sh
+      - name: Validate ZIP
+        run: |
+          archive="$(find dist -maxdepth 1 -name '*.zip' -print -quit)"
+          test -n "$archive"
+          unzip -t "$archive"
+          unzip -l "$archive"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: opendeck-volume-dial-controller-linux-x86_64
+          path: |
+            dist/*.zip
+            dist/*.sha256
+          if-no-files-found: error

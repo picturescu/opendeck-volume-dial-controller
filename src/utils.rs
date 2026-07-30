@@ -78,8 +78,8 @@ pub async fn get_device_row_count() -> Option<u8> {
 }
 
 pub async fn update_stream_deck_buttons() {
-    let column_map = COLUMN_TO_CHANNEL_MAP.lock().await;
-    let mut channels = mixer::MIXER_CHANNELS.lock().await;
+    let column_map = COLUMN_TO_CHANNEL_MAP.lock().await.clone();
+    let channels = mixer::MIXER_CHANNELS.lock().await.clone();
     let row_count = get_device_row_count().await;
 
     for instance in visible_instances(VolumeControllerAction::UUID).await {
@@ -92,7 +92,7 @@ pub async fn update_stream_deck_buttons() {
             continue;
         };
 
-        let Some(channel) = channels.get_mut(&channel_index) else {
+        let Some(channel) = channels.get(&channel_index) else {
             if let Some(rows) = row_count {
                 if rows >= 3 {
                     cleanup_sd_column(&instance).await;
@@ -104,13 +104,6 @@ pub async fn update_stream_deck_buttons() {
             continue;
         };
 
-        match coords.row {
-            0 => channel.header_id = Some(instance.instance_id.clone()),
-            1 => channel.upper_vol_btn_id = Some(instance.instance_id.clone()),
-            2 => channel.lower_vol_btn_id = Some(instance.instance_id.clone()),
-            _ => {}
-        }
-
         if let Some(rows) = row_count {
             if rows >= 3 {
                 update_sd_column(channel, &instance).await;
@@ -118,6 +111,32 @@ pub async fn update_stream_deck_buttons() {
                 // TODO same logic as in cleanup for knobs/dials (appropriate update fn)
                 // update_sd_column_with_knob(&instance).await;
             }
+        }
+    }
+}
+
+pub async fn update_stream_deck_buttons_for(stable_id: &str) {
+    let matching_uids = crate::audio::registry_applications()
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|app| crate::icons::stable_application_id(app) == stable_id)
+        .map(|app| app.uid)
+        .collect::<std::collections::HashSet<_>>();
+    let column_map = COLUMN_TO_CHANNEL_MAP.lock().await.clone();
+    let channels = mixer::MIXER_CHANNELS.lock().await.clone();
+    let instances = visible_instances(VolumeControllerAction::UUID).await;
+    for instance in instances {
+        let Some(coords) = instance.coordinates else {
+            continue;
+        };
+        let Some(channel_index) = column_map.get(&coords.column) else {
+            continue;
+        };
+        let Some(channel) = channels.get(channel_index) else {
+            continue;
+        };
+        if matching_uids.contains(&channel.uid) {
+            update_sd_column(channel, &instance).await;
         }
     }
 }

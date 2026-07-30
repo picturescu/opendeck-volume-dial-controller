@@ -59,6 +59,23 @@ pub fn get_volume_bar_data_uri_split(volume_percent: f32) -> Result<(String, Str
     Ok((top_data_uri, bottom_data_uri))
 }
 
+pub fn dim_data_uri(data_uri: &str) -> Result<String> {
+    let encoded = data_uri
+        .strip_prefix("data:image/png;base64,")
+        .ok_or_else(|| anyhow::anyhow!("unsupported icon data URI"))?;
+    let bytes = general_purpose::STANDARD.decode(encoded)?;
+    let mut image = image::load_from_memory(&bytes)?.to_rgba8();
+    for pixel in image.pixels_mut() {
+        pixel[3] = ((f32::from(pixel[3]) * 0.4).round()) as u8;
+    }
+    let mut output = Cursor::new(Vec::new());
+    image.write_to(&mut output, image::ImageFormat::Png)?;
+    Ok(format!(
+        "data:image/png;base64,{}",
+        general_purpose::STANDARD.encode(output.into_inner())
+    ))
+}
+
 fn set_cached_value(key: String, value: String) -> Result<(), String> {
     match get_cache().lock() {
         Ok(mut cache) => {
@@ -270,6 +287,7 @@ fn draw_volume_pointer(
 }
 
 /// Draw only the outline of a rounded rectangle with antialiasing
+#[allow(clippy::too_many_arguments)]
 fn draw_volume_bar_outline(
     img: &mut RgbaImage,
     x: u32,

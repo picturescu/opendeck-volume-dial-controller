@@ -1,0 +1,35 @@
+name: Feature request
+description: Suggest a focused improvement
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or workflow
+      description: Explain the user need rather than only the proposed implementation.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+    validations:
+      required: true
+  - type: dropdown
+    id: action
+    attributes:
+      label: Related action
+      options:
+        - General/plugin-wide
+        - Volume Control Auto Grid
+        - Application Volume Column
+        - Application Volume Dial
+        - Audio Device Volume Dial
+        - Dynamic Application Volume Dial
+        - Application Selector Button
+  - type: textarea
+    id: compatibility
+    attributes:
+      label: Compatibility considerations
+      description: Note settings/profile compatibility or UUID implications.

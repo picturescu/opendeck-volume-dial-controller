@@ -1,0 +1,81 @@
+name: Bug report
+description: Report a reproducible plugin problem
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Remove private paths, tokens, device serial numbers, and unrelated environment data from logs.
+  - type: input
+    id: plugin
+    attributes:
+      label: Plugin version
+      placeholder: "1.2.0"
+    validations:
+      required: true
+  - type: input
+    id: opendeck
+    attributes:
+      label: OpenDeck version
+    validations:
+      required: true
+  - type: input
+    id: distro
+    attributes:
+      label: Linux distribution
+    validations:
+      required: true
+  - type: input
+    id: audio
+    attributes:
+      label: PulseAudio or PipeWire version
+    validations:
+      required: true
+  - type: input
+    id: hardware
+    attributes:
+      label: Stream Deck model
+    validations:
+      required: true
+  - type: dropdown
+    id: action
+    attributes:
+      label: Action type
+      options:
+        - Volume Control Auto Grid
+        - Application Volume Column
+        - Application Volume Dial
+        - Audio Device Volume Dial
+        - Dynamic Application Volume Dial
+        - Application Selector Button
+    validations:
+      required: true
+  - type: dropdown
+    id: dial_path
+    attributes:
+      label: If this involves a dial, which path?
+      options:
+        - Not a dial issue
+        - Classic Application Volume Dial
+        - Dynamic Application Volume Dial
+        - Audio Device Volume Dial
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction steps
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected and actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant sanitized plugin log excerpt
+      render: text
